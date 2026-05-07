@@ -1,0 +1,565 @@
+<!DOCTYPE html><html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>JEE 2028 Tracker</title>  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>  <style>
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+      font-family:'Trebuchet MS', sans-serif;
+    }
+
+    body{
+      background: linear-gradient(-45deg, #a7f3d0, #bfdbfe, #d9f99d, #93c5fd);
+      background-size: 400% 400%;
+      animation: gradientBG 12s ease infinite;
+      min-height:100vh;
+      overflow-x:hidden;
+      padding:20px;
+      color:#1e293b;
+    }
+
+    .container{
+      max-width:1000px;
+      margin:auto;
+    }
+
+    h1{
+      text-align:center;
+      font-size:3rem;
+      margin-bottom:20px;
+      color:#ff4d6d;
+      text-shadow:2px 2px white;
+    }
+
+    .subtitle{
+      text-align:center;
+      margin-bottom:25px;
+      font-size:18px;
+      color:#334155;
+    }
+
+    .streak{
+      background:#fff7ed;
+      padding:18px;
+      border-radius:20px;
+      text-align:center;
+      font-size:24px;
+      font-weight:bold;
+      margin-bottom:25px;
+      border:4px dashed #fb923c;
+      box-shadow:0 6px 15px rgba(0,0,0,0.1);
+    }
+
+    .buttons{
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+      gap:18px;
+      margin-bottom:30px;
+    }
+
+    button{
+      border:none;
+      padding:18px;
+      border-radius:25px;
+      font-size:17px;
+      font-weight:bold;
+      cursor:pointer;
+      transition:0.3s;
+      color:white;
+      box-shadow:0 8px 15px rgba(0,0,0,0.15);
+    }
+
+    button:hover{
+      transform:translateY(-5px) scale(1.03);
+    }
+
+    button:disabled{
+      opacity:0.5;
+      cursor:not-allowed;
+    }
+
+    #wakeBtn{
+      background:#f59e0b;
+    }
+
+    .coachStart{
+      background:#3b82f6;
+    }
+
+    .coachEnd{
+      background:#06b6d4;
+    }
+
+    .studyStart{
+      background:#8b5cf6;
+    }
+
+    .studyStop{
+      background:#ef4444;
+    }
+
+    #sleepBtn{
+      background:#111827;
+    }
+
+    .card{
+      background:white;
+      border-radius:30px;
+      padding:25px;
+      margin-bottom:25px;
+      box-shadow:0 10px 25px rgba(0,0,0,0.12);
+    }
+
+    .card h2{
+      margin-bottom:15px;
+      color:#7c3aed;
+    }
+
+    .timeline-item{
+      background:#f8fafc;
+      padding:14px;
+      border-radius:16px;
+      margin-bottom:12px;
+      border-left:6px solid #8b5cf6;
+      font-size:16px;
+    }
+
+    .monthly-item{
+      background:#eef2ff;
+      padding:15px;
+      border-radius:16px;
+      margin-bottom:12px;
+      border-left:6px solid #6366f1;
+    }
+
+    .report{
+      background:white;
+      border-radius:30px;
+      padding:25px;
+      margin-top:20px;
+      box-shadow:0 10px 25px rgba(0,0,0,0.12);
+    }
+
+    .report p{
+      margin-bottom:12px;
+      font-size:17px;
+    }
+
+    canvas{
+      background:white;
+      border-radius:18px;
+      margin-top:20px;
+      padding:10px;
+    }
+
+    .download-btn{
+      margin-top:20px;
+      width:100%;
+      background:#22c55e;
+      color:white;
+      padding:16px;
+      border-radius:18px;
+      font-size:18px;
+    }
+
+    .cute-box{
+      text-align:center;
+      margin-bottom:20px;
+      font-size:22px;
+    }
+
+  @keyframes gradientBG{
+      0%{background-position:0% 50%;}
+      50%{background-position:100% 50%;}
+      100%{background-position:0% 50%;}
+    }
+
+    .floating{
+      position:fixed;
+      width:20px;
+      height:20px;
+      border-radius:50%;
+      background:rgba(255,255,255,0.4);
+      animation:float 15s linear infinite;
+      z-index:-1;
+    }
+
+    @keyframes float{
+      from{
+        transform:translateY(100vh) scale(0);
+        opacity:0;
+      }
+      10%{
+        opacity:1;
+      }
+      to{
+        transform:translateY(-120vh) scale(1.5);
+        opacity:0;
+      }
+    }
+
+  </style></head>
+<body><div class="floating" style="left:5%; animation-delay:0s;"></div>
+<div class="floating" style="left:15%; animation-delay:2s;"></div>
+<div class="floating" style="left:30%; animation-delay:4s;"></div>
+<div class="floating" style="left:45%; animation-delay:1s;"></div>
+<div class="floating" style="left:60%; animation-delay:5s;"></div>
+<div class="floating" style="left:75%; animation-delay:3s;"></div>
+<div class="floating" style="left:90%; animation-delay:6s;"></div><div class="container">  <h1>🚀 JEE 2028</h1>  <div class="subtitle">
+    Your Smart Study Journey ✨
+  </div>  <div class="cute-box">
+    🐻 📖 🌙 ⭐ 🚀
+  </div>  <div class="streak" id="streakBox">
+    🔥 Study Streak: 0 Days
+  </div>  <div class="buttons"><button id="wakeBtn" onclick="wakeUp()">
+  🌅 Wake Up
+</button>
+
+<button class="coachStart" onclick="coachingStart()">
+  🏫 Go To Coaching
+</button>
+
+<button class="coachEnd" onclick="coachingEnd()">
+  🏠 Return From Coaching
+</button>
+
+<button class="studyStart" onclick="startStudy()">
+  📖 Start Study
+</button>
+
+<button class="studyStop" onclick="stopStudy()">
+  ⏹ Stop Study
+</button>
+
+<button id="sleepBtn" onclick="sleepNow()">
+  🌙 Sleep
+</button>
+
+  </div>  <div class="card">
+    <h2>📌 Today's Timeline</h2>
+    <div id="timeline"></div>
+  </div>  <div class="card">
+    <h2>📅 Monthly Reports</h2>
+    <div id="monthlyReports"></div>
+  </div>  <div id="reportSection"></div></div><script>
+
+const today = new Date().toLocaleDateString();
+
+let allData = JSON.parse(localStorage.getItem("studyPulse")) || {};
+
+if(!allData[today]){
+  allData[today] = {
+    wakeUp:null,
+    coachingStart:null,
+    coachingEnd:null,
+    studySessions:[],
+    totalStudy:0,
+    sleep:null,
+    completed:false
+  };
+}
+
+let currentStudyStart = null;
+
+function saveData(){
+  localStorage.setItem("studyPulse", JSON.stringify(allData));
+}
+
+function formatTime(time){
+  return new Date(time).toLocaleTimeString([], {
+    hour:'2-digit',
+    minute:'2-digit'
+  });
+}
+
+function addTimeline(text){
+
+  const div = document.createElement('div');
+
+  div.className = 'timeline-item';
+
+  div.innerText = text;
+
+  document.getElementById('timeline').appendChild(div);
+}
+
+function wakeUp(){
+
+  if(allData[today].wakeUp){
+    alert('Wake Up already marked today!');
+    return;
+  }
+
+  allData[today].wakeUp = new Date().toISOString();
+
+  saveData();
+
+  addTimeline(
+    '🌅 Wake Up: ' +
+    formatTime(allData[today].wakeUp)
+  );
+
+  document.getElementById('wakeBtn').disabled = true;
+}
+
+function coachingStart(){
+
+  if(allData[today].coachingStart){
+    alert('Coaching already started!');
+    return;
+  }
+
+  allData[today].coachingStart = new Date().toISOString();
+
+  saveData();
+
+  addTimeline(
+    '🏫 Coaching Started: ' +
+    formatTime(allData[today].coachingStart)
+  );
+}
+
+function coachingEnd(){
+
+  if(!allData[today].coachingStart){
+    alert('Start coaching first!');
+    return;
+  }
+
+  if(allData[today].coachingEnd){
+    alert('Coaching already ended!');
+    return;
+  }
+
+  allData[today].coachingEnd = new Date().toISOString();
+
+  saveData();
+
+  addTimeline(
+    '🏠 Returned From Coaching: ' +
+    formatTime(allData[today].coachingEnd)
+  );
+}
+
+function startStudy(){
+
+  if(currentStudyStart){
+    alert('Study session already running!');
+    return;
+  }
+
+  currentStudyStart = new Date();
+
+  addTimeline(
+    '📖 Study Started: ' +
+    formatTime(currentStudyStart)
+  );
+}
+
+function stopStudy(){
+
+  if(!currentStudyStart){
+    alert('Start study first!');
+    return;
+  }
+
+  const end = new Date();
+
+  const duration =
+    (end - currentStudyStart) / 1000 / 60;
+
+  allData[today].studySessions.push({
+    start:currentStudyStart.toISOString(),
+    end:end.toISOString(),
+    duration:duration
+  });
+
+  allData[today].totalStudy += duration;
+
+  saveData();
+
+  addTimeline(
+    '⏹ Study Ended: ' +
+    formatTime(end) +
+    ' | Duration: ' +
+    (duration/60).toFixed(2) +
+    ' hrs'
+  );
+
+  currentStudyStart = null;
+}
+
+function sleepNow(){
+
+  if(allData[today].sleep){
+    alert('Sleep already marked today!');
+    return;
+  }
+
+  allData[today].sleep = new Date().toISOString();
+
+  allData[today].completed = true;
+
+  saveData();
+
+  addTimeline(
+    '🌙 Sleep Time: ' +
+    formatTime(allData[today].sleep)
+  );
+
+  document.getElementById('sleepBtn').disabled = true;
+
+  generateReport();
+
+  updateStreak();
+
+  loadMonthlyReports();
+}
+
+function generateReport(){
+
+  const totalStudyHours =
+    (allData[today].totalStudy / 60).toFixed(2);
+
+  document.getElementById('reportSection').innerHTML = `
+
+    <div class="report" id="reportCard">
+
+      <h2 style="text-align:center;margin-bottom:20px;">
+        📊 Daily Study Report
+      </h2>
+
+      <p><strong>📅 Date:</strong> ${today}</p>
+
+      <p><strong>🌅 Wake Up:</strong>
+      ${allData[today].wakeUp ? formatTime(allData[today].wakeUp) : 'Not Marked'}
+      </p>
+
+      <p><strong>🏫 Coaching Start:</strong>
+      ${allData[today].coachingStart ? formatTime(allData[today].coachingStart) : 'Not Marked'}
+      </p>
+
+      <p><strong>🏠 Coaching End:</strong>
+      ${allData[today].coachingEnd ? formatTime(allData[today].coachingEnd) : 'Not Marked'}
+      </p>
+
+      <p><strong>📖 Total Study:</strong>
+      ${totalStudyHours} hrs
+      </p>
+
+      <p><strong>🌙 Sleep:</strong>
+      ${formatTime(allData[today].sleep)}
+      </p>
+
+      <canvas id="studyChart"></canvas>
+
+      <button class="download-btn" onclick="downloadReport()">
+        📥 Download & Share Report
+      </button>
+
+    </div>
+  `;
+
+  const ctx = document.getElementById('studyChart');
+
+  new Chart(ctx, {
+    type:'bar',
+    data:{
+      labels:['Self Study Hours'],
+      datasets:[{
+        label:'Hours',
+        data:[totalStudyHours]
+      }]
+    },
+    options:{
+      responsive:true
+    }
+  });
+}
+
+function downloadReport(){
+
+  html2canvas(
+    document.getElementById('reportCard')
+  ).then(canvas => {
+
+    const link = document.createElement('a');
+
+    link.download =
+      `Study_Report_${today}.png`;
+
+    link.href = canvas.toDataURL();
+
+    link.click();
+  });
+}
+
+function updateStreak(){
+
+  let streak = 0;
+
+  const dates = Object.keys(allData).sort(
+    (a,b)=>new Date(a)-new Date(b)
+  );
+
+  for(let i = dates.length - 1; i >= 0; i--){
+
+    if(allData[dates[i]].completed){
+      streak++;
+    }else{
+      break;
+    }
+  }
+
+  document.getElementById('streakBox').innerText =
+    `🔥 Study Streak: ${streak} Days`;
+}
+
+function loadMonthlyReports(){
+
+  const monthly =
+    document.getElementById('monthlyReports');
+
+  monthly.innerHTML = '';
+
+  Object.keys(allData)
+    .reverse()
+    .forEach(date => {
+
+      const d = allData[date];
+
+      if(d.completed){
+
+        const div = document.createElement('div');
+
+        div.className = 'monthly-item';
+
+        div.innerHTML = `
+          <strong>${date}</strong><br>
+          📖 Study: ${(d.totalStudy/60).toFixed(2)} hrs
+        `;
+
+        monthly.appendChild(div);
+      }
+    });
+}
+
+function restoreButtons(){
+
+  if(allData[today].wakeUp){
+    document.getElementById('wakeBtn').disabled = true;
+  }
+
+  if(allData[today].sleep){
+    document.getElementById('sleepBtn').disabled = true;
+  }
+}
+
+restoreButtons();
+updateStreak();
+loadMonthlyReports();
+
+</script></body>
+</html>
