@@ -159,6 +159,15 @@ body::before{
     max-width:700px;
 }
 
+#liveClock{
+    margin-top:20px;
+    font-size:34px;
+    font-weight:700;
+    color:white;
+    letter-spacing:2px;
+    text-shadow:0 0 25px rgba(56,189,248,0.6);
+}
+
 .hero-stats{
     display:flex;
     gap:20px;
@@ -474,12 +483,19 @@ canvas{
     margin-top:20px;
 }
 
-.download-btn{
-    width:100%;
+.report-buttons{
+    display:flex;
+    gap:15px;
+    flex-wrap:wrap;
     margin-top:25px;
+}
+
+.download-btn{
+    flex:1;
+    min-width:250px;
 
     padding:18px;
-    font-size:20px;
+    font-size:18px;
 
     border-radius:24px;
 
@@ -488,6 +504,25 @@ canvas{
     135deg,
     #22c55e,
     #14b8a6);
+
+    box-shadow:
+    0 10px 30px rgba(34,197,94,0.3);
+}
+
+.whatsapp-btn{
+    flex:1;
+    min-width:250px;
+
+    padding:18px;
+    font-size:18px;
+
+    border-radius:24px;
+
+    background:
+    linear-gradient(
+    135deg,
+    #16a34a,
+    #22c55e);
 
     box-shadow:
     0 10px 30px rgba(34,197,94,0.3);
@@ -534,6 +569,10 @@ canvas{
             Level up your preparation with futuristic
             analytics and beautiful study reports.
         </p>
+
+        <div id="liveClock">
+            00:00:00
+        </div>
 
         <div class="hero-stats">
 
@@ -613,6 +652,33 @@ canvas{
 </div>
 
 <script>
+
+/* =========================
+   LIVE CLOCK
+========================= */
+
+function updateClock(){
+
+    const now = new Date();
+
+    const time =
+    now.toLocaleTimeString(
+        'en-IN',
+        {
+            hour:'2-digit',
+            minute:'2-digit',
+            second:'2-digit'
+        }
+    );
+
+    document
+    .getElementById('liveClock')
+    .innerText = time;
+}
+
+setInterval(updateClock,1000);
+
+updateClock();
 
 /* =========================
    ACTIVE DAY SYSTEM
@@ -720,6 +786,9 @@ function disableAllButtons(){
         if(
             !btn.classList.contains(
                 'download-btn'
+            ) &&
+            !btn.classList.contains(
+                'whatsapp-btn'
             )
         ){
             btn.disabled = true;
@@ -947,8 +1016,6 @@ function sleepNow(){
 
     loadMonthlyReports();
 
-    /* NEXT DAY START */
-
     const nextDate =
     new Date().toLocaleDateString();
 
@@ -1071,13 +1138,25 @@ function generateReport(){
 
         <canvas id="studyChart"></canvas>
 
-        <button
-        class="download-btn"
-        onclick="downloadReport()">
+        <div class="report-buttons">
 
-            📥 Download & Share Report
+            <button
+            class="download-btn"
+            onclick="downloadReport()">
 
-        </button>
+                📥 Download Report
+
+            </button>
+
+            <button
+            class="whatsapp-btn"
+            onclick="sendToParent()">
+
+                📤 Send Today's Report To Parent
+
+            </button>
+
+        </div>
 
     </div>
     `;
@@ -1172,6 +1251,46 @@ function downloadReport(){
         canvas.toDataURL();
 
         link.click();
+    });
+}
+
+/* =========================
+   SEND TO PARENT
+========================= */
+
+function sendToParent(){
+
+    html2canvas(
+        document.getElementById(
+            'reportCard'
+        )
+    ).then(canvas => {
+
+        const link =
+        document.createElement('a');
+
+        link.download =
+        `Study_Report_${activeDate}.png`;
+
+        link.href =
+        canvas.toDataURL();
+
+        link.click();
+
+        const message =
+`Today's JEE 2028 Study Report is ready ✅
+
+Please attach the downloaded PNG file and send it.`;
+
+        const whatsappURL =
+`https://wa.me/919198426858?text=${
+encodeURIComponent(message)
+}`;
+
+        window.open(
+            whatsappURL,
+            '_blank'
+        );
     });
 }
 
