@@ -726,6 +726,11 @@ onclick="closeModal()">
 
 </div>
 
+<!-- ========================= UPDATED SCRIPT (FULLY MERGED) ========================= -->
+<!-- PURA OLD UI SAME RAHEGA -->
+<!-- SIRF STREAK + RUNNING STUDY SESSION FIX KIYA GAYA HAI -->
+<!-- APNE PURANE <script>...</script> KO ISSE REPLACE KAR DO -->
+
 <script>
 
 /* CLOCK */
@@ -752,6 +757,27 @@ setInterval(updateClock,1000);
 
 updateClock();
 
+/* SAFE DATE FORMAT */
+
+function getTodayDate(){
+
+const d = new Date();
+
+const day =
+String(d.getDate())
+.padStart(2,'0');
+
+const month =
+String(d.getMonth()+1)
+.padStart(2,'0');
+
+const year =
+d.getFullYear();
+
+return `${year}-${month}-${day}`;
+
+}
+
 /* DATA */
 
 let activeDate =
@@ -762,8 +788,7 @@ localStorage.getItem(
 if(!activeDate){
 
 activeDate =
-new Date()
-.toLocaleDateString();
+getTodayDate();
 
 localStorage.setItem(
 "activeStudyDate",
@@ -786,11 +811,20 @@ if(!allData[date]){
 allData[date] = {
 
 wakeUp:null,
+
 coachingStart:null,
+
 coachingEnd:null,
+
 studySessions:[],
+
+/* NEW */
+currentStudyStart:null,
+
 totalStudy:0,
+
 sleep:null,
+
 completed:false
 
 };
@@ -800,8 +834,6 @@ completed:false
 }
 
 createDay(activeDate);
-
-let currentStudyStart = null;
 
 /* SAVE */
 
@@ -1001,7 +1033,12 @@ allData[activeDate]
 
 function startStudy(){
 
-if(currentStudyStart){
+/* FIXED */
+
+if(
+allData[activeDate]
+.currentStudyStart
+){
 
 alert(
 'Study session already running!'
@@ -1011,14 +1048,18 @@ return;
 
 }
 
-currentStudyStart =
+const now =
 new Date();
+
+allData[activeDate]
+.currentStudyStart =
+now.toISOString();
+
+saveData();
 
 addTimeline(
 '📖 Study Started: ' +
-formatTime(
-currentStudyStart
-)
+formatTime(now)
 );
 
 }
@@ -1027,7 +1068,13 @@ currentStudyStart
 
 function stopStudy(){
 
-if(!currentStudyStart){
+/* FIXED */
+
+const currentStart =
+allData[activeDate]
+.currentStudyStart;
+
+if(!currentStart){
 
 alert(
 'Start study first!'
@@ -1037,11 +1084,14 @@ return;
 
 }
 
+const start =
+new Date(currentStart);
+
 const end =
 new Date();
 
 const duration =
-(end-currentStudyStart)
+(end-start)
 /1000/60;
 
 allData[activeDate]
@@ -1049,8 +1099,7 @@ allData[activeDate]
 .push({
 
 start:
-currentStudyStart
-.toISOString(),
+start.toISOString(),
 
 end:
 end.toISOString(),
@@ -1063,6 +1112,10 @@ duration
 allData[activeDate]
 .totalStudy += duration;
 
+/* RESET */
+allData[activeDate]
+.currentStudyStart = null;
+
 saveData();
 
 addTimeline(
@@ -1073,9 +1126,6 @@ formatTime(end) +
 .toFixed(2) +
 ' hrs'
 );
-
-currentStudyStart =
-null;
 
 }
 
@@ -1096,7 +1146,12 @@ return;
 
 }
 
-if(currentStudyStart){
+/* AUTO STOP IF RUNNING */
+
+if(
+allData[activeDate]
+.currentStudyStart
+){
 
 stopStudy();
 
@@ -1133,10 +1188,34 @@ disableAllButtons();
 
 function generateReport(){
 
+/* INCLUDE RUNNING SESSION */
+
+let totalMinutes =
+allData[activeDate]
+.totalStudy;
+
+if(
+allData[activeDate]
+.currentStudyStart
+){
+
+const runningMinutes =
+(
+new Date() -
+new Date(
+allData[activeDate]
+.currentStudyStart
+)
+)
+/1000/60;
+
+totalMinutes += runningMinutes;
+
+}
+
 const totalStudyHours =
 (
-allData[activeDate]
-.totalStudy / 60
+totalMinutes / 60
 ).toFixed(2);
 
 document
@@ -1220,10 +1299,17 @@ ${totalStudyHours} hrs
 <div class="report-box">
 <h4>🌙 Sleep</h4>
 <span>
-${formatTime(
+${
 allData[activeDate]
 .sleep
-)}
+?
+formatTime(
+allData[activeDate]
+.sleep
+)
+:
+'--'
+}
 </span>
 </div>
 
@@ -1470,7 +1556,7 @@ confirmSendReport();
 
 });
 
-/* STREAK */
+/* STREAK FIXED */
 
 function updateStreak(){
 
@@ -1478,12 +1564,9 @@ let streak = 0;
 
 const dates =
 Object.keys(allData)
-.sort(
-(a,b)=>
-new Date(a)
--
-new Date(b)
-);
+.sort();
+
+/* NOW CORRECT */
 
 for(
 let i =
@@ -1534,6 +1617,26 @@ const d =
 allData[date];
 
 if(d.completed){
+
+/* INCLUDE RUNNING */
+
+let totalMinutes =
+d.totalStudy;
+
+if(d.currentStudyStart){
+
+const running =
+(
+new Date() -
+new Date(
+d.currentStudyStart
+)
+)
+/1000/60;
+
+totalMinutes += running;
+
+}
 
 const div =
 document
@@ -1590,7 +1693,7 @@ formatTime(d.coachingEnd)
 <div class="monthly-study">
 
 📖 Study:
-${(d.totalStudy/60)
+${(totalMinutes/60)
 .toFixed(2)} hrs
 
 </div>
@@ -1682,6 +1785,19 @@ session.end
 
 });
 
+/* RESTORE RUNNING SESSION */
+
+if(data.currentStudyStart){
+
+addTimeline(
+'📖 Ongoing Study Session: ' +
+formatTime(
+data.currentStudyStart
+)
+);
+
+}
+
 if(data.sleep){
 
 addTimeline(
@@ -1734,7 +1850,7 @@ disableAllButtons();
 function checkDateReset(){
 
 const today =
-new Date().toLocaleDateString();
+getTodayDate();
 
 const savedDate =
 localStorage.getItem(
@@ -1773,8 +1889,6 @@ document
 'wakeBtn'
 )
 .disabled = false;
-
-currentStudyStart = null;
 
 restoreTimeline();
 
@@ -1821,6 +1935,5 @@ updateStreak();
 loadMonthlyReports();
 
 </script>
-
 </body>
 </html>
