@@ -692,12 +692,29 @@
             try {
                 await signOut(auth);
                 localStorage.removeItem("studyPulse");
+                localStorage.removeItem("activeStudyDate");
                 location.reload();
             } catch (error) {
                 alert(error.message);
             }
         }
 
+        // ====== CLOUD SYNC FUNCTION (GLOBALLY EXPOSED) ======
+        window.syncToCloud = async function() {
+            if (!currentUserUID) {
+                console.log("No user logged in, skipping cloud sync");
+                return;
+            }
+            try {
+                const docRef = doc(db, "users", currentUserUID);
+                await setDoc(docRef, { studyPulse: window.allData }, { merge: true });
+                console.log("✅ Data synced to Firestore successfully!");
+            } catch (e) {
+                console.error("❌ Cloud sync error:", e);
+            }
+        }
+
+        // ====== LOAD DATA FROM CLOUD ON LOGIN ======
         onAuthStateChanged(auth, async (user) => {
             const authModal = document.getElementById('authModal');
             const userProfileBar = document.getElementById('userProfileBar');
@@ -718,12 +735,16 @@
                         if (cloudData) {
                             localStorage.setItem("studyPulse", JSON.stringify(cloudData));
                             window.allData = cloudData;
+                            console.log("✅ Data loaded from Firestore!");
                         }
+                    } else {
+                        console.log("No existing data in Firestore, starting fresh.");
                     }
                 } catch (e) {
                     console.error("Error fetching cloud data:", e);
                 }
 
+                // Refresh UI
                 document.getElementById('timeline').innerHTML = '';
                 document.getElementById('reportSection').innerHTML = '';
                 if (typeof restoreTimeline === 'function') restoreTimeline();
@@ -737,16 +758,6 @@
                 userProfileBar.style.display = 'none';
             }
         });
-
-        window.syncToCloud = async function() {
-            if (!currentUserUID) return;
-            try {
-                const docRef = doc(db, "users", currentUserUID);
-                await setDoc(docRef, { studyPulse: window.allData }, { merge: true });
-            } catch (e) {
-                console.error("Cloud sync error:", e);
-            }
-        }
     </script>
 
     <script>
@@ -774,7 +785,10 @@
             localStorage.setItem("activeStudyDate", activeDate);
         }
 
-        window.allData = JSON.parse(localStorage.getItem("studyPulse")) || {};
+        // Initialize allData
+        if (!window.allData) {
+            window.allData = JSON.parse(localStorage.getItem("studyPulse")) || {};
+        }
 
         function createDay(date) {
             if (!window.allData[date]) {
@@ -792,9 +806,10 @@
         }
         createDay(activeDate);
 
-        /* ===== SAVE ===== */
+        /* ===== SAVE (with cloud sync) ===== */
         function saveData() {
             localStorage.setItem("studyPulse", JSON.stringify(window.allData));
+            // Cloud sync - will only run if user is logged in
             if (window.syncToCloud) {
                 window.syncToCloud();
             }
@@ -850,6 +865,8 @@
             saveData();
             addTimeline('🌅 Wake Up: ' + formatTime(window.allData[activeDate].wakeUp));
             document.getElementById('wakeBtn').disabled = true;
+            updateStreak();
+            loadMonthlyReports();
         };
 
         /* ===== COACHING START ===== */
@@ -861,6 +878,8 @@
             window.allData[activeDate].coachingStart = new Date().toISOString();
             saveData();
             addTimeline('🏫 Coaching Started: ' + formatTime(window.allData[activeDate].coachingStart));
+            updateStreak();
+            loadMonthlyReports();
         };
 
         /* ===== COACHING END ===== */
@@ -876,6 +895,8 @@
             window.allData[activeDate].coachingEnd = new Date().toISOString();
             saveData();
             addTimeline('🏠 Returned From Coaching: ' + formatTime(window.allData[activeDate].coachingEnd));
+            updateStreak();
+            loadMonthlyReports();
         };
 
         /* ===== START STUDY ===== */
@@ -888,6 +909,8 @@
             window.allData[activeDate].currentStudyStart = now.toISOString();
             saveData();
             addTimeline('📖 Study Started: ' + formatTime(now));
+            updateStreak();
+            loadMonthlyReports();
         };
 
         /* ===== STOP STUDY ===== */
@@ -909,6 +932,9 @@
             window.allData[activeDate].currentStudyStart = null;
             saveData();
             addTimeline('⏹ Study Ended: ' + formatTime(end) + ' | Duration: ' + (duration / 60).toFixed(2) + ' hrs');
+            generateReport();
+            updateStreak();
+            loadMonthlyReports();
         };
 
         /* ===== SLEEP ===== */
@@ -1084,7 +1110,7 @@
             });
         }
 
-        /* ===== RESTORE ===== */
+        /* ===== RESTORE TIMELINE ===== */
         function restoreTimeline() {
             const data = window.allData[activeDate];
             if (!data) return;
@@ -1111,6 +1137,7 @@
             }
         }
 
+        /* ===== RESTORE BUTTONS ===== */
         function restoreButtons() {
             if (window.allData[activeDate] && window.allData[activeDate].wakeUp) {
                 document.getElementById('wakeBtn').disabled = true;
@@ -1136,6 +1163,7 @@
                 restoreTimeline();
                 restoreButtons();
                 loadMonthlyReports();
+                updateStreak();
             }
         }
 
@@ -1152,6 +1180,9 @@
         restoreButtons();
         updateStreak();
         loadMonthlyReports();
+
+        console.log("🚀 JEE 2028 Tracker loaded successfully!");
+        console.log("📊 Current data:", window.allData);
     </script>
 </body>
 </html>
