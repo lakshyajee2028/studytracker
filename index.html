@@ -926,7 +926,7 @@ onAuthStateChanged(auth, async (user) => {
         const cloudData = docSnap.data().studyPulse;
         if (cloudData) {
           localStorage.setItem("studyPulse", JSON.stringify(cloudData));
-          allData = cloudData;
+          window.allData = cloudData;
         }
       }
     } catch(e) {
@@ -936,10 +936,10 @@ onAuthStateChanged(auth, async (user) => {
     // Refresh UI after data load
     document.getElementById('timeline').innerHTML = '';
     document.getElementById('reportSection').innerHTML = '';
-    restoreTimeline();
-    restoreButtons();
-    updateStreak();
-    loadMonthlyReports();
+    if(typeof restoreTimeline === 'function') restoreTimeline();
+    if(typeof restoreButtons === 'function') restoreButtons();
+    if(typeof updateStreak === 'function') updateStreak();
+    if(typeof loadMonthlyReports === 'function') loadMonthlyReports();
 
   } else {
     currentUserUID = null;
@@ -953,7 +953,7 @@ window.syncToCloud = async function() {
   if(!currentUserUID) return;
   try {
     const docRef = doc(db, "users", currentUserUID);
-    await setDoc(docRef, { studyPulse: allData }, { merge: true });
+    await setDoc(docRef, { studyPulse: window.allData }, { merge: true });
   } catch(e) {
     console.error("Cloud sync error:", e);
   }
@@ -1015,7 +1015,7 @@ activeDate
 
 }
 
-let allData =
+window.allData =
 JSON.parse(
 localStorage.getItem(
 "studyPulse"
@@ -1024,9 +1024,9 @@ localStorage.getItem(
 
 function createDay(date){
 
-if(!allData[date]){
+if(!window.allData[date]){
 
-allData[date] = {
+window.allData[date] = {
 
 wakeUp:null,
 coachingStart:null,
@@ -1034,7 +1034,6 @@ coachingEnd:null,
 
 studySessions:[],
 
-/* NEW */
 currentStudyStart:null,
 
 totalStudy:0,
@@ -1057,7 +1056,7 @@ function saveData(){
 
 localStorage.setItem(
 "studyPulse",
-JSON.stringify(allData)
+JSON.stringify(window.allData)
 );
 
 if(window.syncToCloud) {
@@ -1146,7 +1145,7 @@ btn.disabled = false;
 
 function wakeUp(){
 
-if(allData[activeDate].wakeUp){
+if(window.allData[activeDate].wakeUp){
 
 alert(
 'Wake Up already marked!'
@@ -1156,7 +1155,7 @@ return;
 
 }
 
-allData[activeDate]
+window.allData[activeDate]
 .wakeUp =
 new Date().toISOString();
 
@@ -1165,7 +1164,7 @@ saveData();
 addTimeline(
 '🌅 Wake Up: ' +
 formatTime(
-allData[activeDate]
+window.allData[activeDate]
 .wakeUp
 )
 );
@@ -1183,7 +1182,7 @@ document
 function coachingStart(){
 
 if(
-allData[activeDate]
+window.allData[activeDate]
 .coachingStart
 ){
 
@@ -1195,7 +1194,7 @@ return;
 
 }
 
-allData[activeDate]
+window.allData[activeDate]
 .coachingStart =
 new Date().toISOString();
 
@@ -1204,7 +1203,7 @@ saveData();
 addTimeline(
 '🏫 Coaching Started: ' +
 formatTime(
-allData[activeDate]
+window.allData[activeDate]
 .coachingStart
 )
 );
@@ -1216,7 +1215,7 @@ allData[activeDate]
 function coachingEnd(){
 
 if(
-!allData[activeDate]
+!window.allData[activeDate]
 .coachingStart
 ){
 
@@ -1229,7 +1228,7 @@ return;
 }
 
 if(
-allData[activeDate]
+window.allData[activeDate]
 .coachingEnd
 ){
 
@@ -1241,7 +1240,7 @@ return;
 
 }
 
-allData[activeDate]
+window.allData[activeDate]
 .coachingEnd =
 new Date().toISOString();
 
@@ -1250,7 +1249,7 @@ saveData();
 addTimeline(
 '🏠 Returned From Coaching: ' +
 formatTime(
-allData[activeDate]
+window.allData[activeDate]
 .coachingEnd
 )
 );
@@ -1262,7 +1261,7 @@ allData[activeDate]
 function startStudy(){
 
 if(
-allData[activeDate]
+window.allData[activeDate]
 .currentStudyStart
 ){
 
@@ -1277,7 +1276,7 @@ return;
 const now =
 new Date();
 
-allData[activeDate]
+window.allData[activeDate]
 .currentStudyStart =
 now.toISOString();
 
@@ -1295,7 +1294,7 @@ formatTime(now)
 function stopStudy(){
 
 const currentStart =
-allData[activeDate]
+window.allData[activeDate]
 .currentStudyStart;
 
 if(!currentStart){
@@ -1318,7 +1317,7 @@ const duration =
 (end-start)
 /1000/60;
 
-allData[activeDate]
+window.allData[activeDate]
 .studySessions
 .push({
 
@@ -1333,10 +1332,10 @@ duration
 
 });
 
-allData[activeDate]
+window.allData[activeDate]
 .totalStudy += duration;
 
-allData[activeDate]
+window.allData[activeDate]
 .currentStudyStart = null;
 
 saveData();
@@ -1357,7 +1356,7 @@ formatTime(end) +
 function sleepNow(){
 
 if(
-allData[activeDate]
+window.allData[activeDate]
 .sleep
 ){
 
@@ -1372,7 +1371,7 @@ return;
 /* AUTO STOP RUNNING SESSION */
 
 if(
-allData[activeDate]
+window.allData[activeDate]
 .currentStudyStart
 ){
 
@@ -1380,11 +1379,11 @@ stopStudy();
 
 }
 
-allData[activeDate]
+window.allData[activeDate]
 .sleep =
 new Date().toISOString();
 
-allData[activeDate]
+window.allData[activeDate]
 .completed = true;
 
 saveData();
@@ -1392,7 +1391,7 @@ saveData();
 addTimeline(
 '🌙 Sleep Time: ' +
 formatTime(
-allData[activeDate]
+window.allData[activeDate]
 .sleep
 )
 );
@@ -1412,13 +1411,13 @@ disableAllButtons();
 function generateReport(){
 
 let totalMinutes =
-allData[activeDate]
+window.allData[activeDate]
 .totalStudy;
 
 /* INCLUDE RUNNING SESSION */
 
 if(
-allData[activeDate]
+window.allData[activeDate]
 .currentStudyStart
 ){
 
@@ -1426,7 +1425,7 @@ const running =
 (
 new Date() -
 new Date(
-allData[activeDate]
+window.allData[activeDate]
 .currentStudyStart
 )
 )
@@ -1465,11 +1464,11 @@ id="reportCard">
 <h4>🌅 Wake Up</h4>
 <span>
 ${
-allData[activeDate]
+window.allData[activeDate]
 .wakeUp
 ?
 formatTime(
-allData[activeDate]
+window.allData[activeDate]
 .wakeUp
 )
 :
@@ -1482,11 +1481,11 @@ allData[activeDate]
 <h4>🏫 Coaching Start</h4>
 <span>
 ${
-allData[activeDate]
+window.allData[activeDate]
 .coachingStart
 ?
 formatTime(
-allData[activeDate]
+window.allData[activeDate]
 .coachingStart
 )
 :
@@ -1499,11 +1498,11 @@ allData[activeDate]
 <h4>🏠 Coaching End</h4>
 <span>
 ${
-allData[activeDate]
+window.allData[activeDate]
 .coachingEnd
 ?
 formatTime(
-allData[activeDate]
+window.allData[activeDate]
 .coachingEnd
 )
 :
@@ -1523,11 +1522,11 @@ ${totalStudyHours} hrs
 <h4>🌙 Sleep</h4>
 <span>
 ${
-allData[activeDate]
+window.allData[activeDate]
 .sleep
 ?
 formatTime(
-allData[activeDate]
+window.allData[activeDate]
 .sleep
 )
 :
@@ -1786,7 +1785,7 @@ function updateStreak(){
 let streak = 0;
 
 const dates =
-Object.keys(allData)
+Object.keys(window.allData)
 .sort((a,b)=>{
 
 const da =
@@ -1807,7 +1806,7 @@ i--
 ){
 
 if(
-allData[dates[i]]
+window.allData[dates[i]]
 .completed
 ){
 
@@ -1841,12 +1840,12 @@ document.getElementById(
 
 monthly.innerHTML = '';
 
-Object.keys(allData)
+Object.keys(window.allData)
 .reverse()
 .forEach(date=>{
 
 const d =
-allData[date];
+window.allData[date];
 
 if(d.completed){
 
@@ -1955,7 +1954,7 @@ monthly.appendChild(div);
 function restoreTimeline(){
 
 const data =
-allData[activeDate];
+window.allData[activeDate];
 
 if(!data) return;
 
@@ -2048,9 +2047,9 @@ generateReport();
 function restoreButtons(){
 
 if(
-allData[activeDate]
+window.allData[activeDate]
 &&
-allData[activeDate]
+window.allData[activeDate]
 .wakeUp
 ){
 
@@ -2063,9 +2062,9 @@ document
 }
 
 if(
-allData[activeDate]
+window.allData[activeDate]
 &&
-allData[activeDate]
+window.allData[activeDate]
 .completed
 ){
 
