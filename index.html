@@ -542,49 +542,26 @@
             }
         }
 
-        // ====== CLOUD SYNC ======
+        // ====== CLOUD SYNC (GLOBALLY EXPOSED) ======
         window.syncToCloud = async function() {
             if (!currentUserUID) {
-                console.log("No user logged in, skipping cloud sync");
+                console.log("❌ No user logged in, skipping cloud sync");
                 return;
             }
             try {
                 const docRef = doc(db, "users", currentUserUID);
                 await setDoc(docRef, { studyPulse: window.allData }, { merge: true });
                 console.log("✅ Data synced to Firestore successfully!");
+                return true;
             } catch (e) {
                 console.error("❌ Cloud sync error:", e);
+                return false;
             }
         }
 
-        // ====== REAL-TIME LISTENER ======
-        function setupRealtimeListener(userUID) {
-            if (unsubscribeSnapshot) {
-                unsubscribeSnapshot();
-                unsubscribeSnapshot = null;
-            }
-
-            const docRef = doc(db, "users", userUID);
-            unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const cloudData = docSnap.data().studyPulse;
-                    if (cloudData && Object.keys(cloudData).length > 0) {
-                        // Update local data
-                        window.allData = cloudData;
-                        localStorage.setItem("studyPulse", JSON.stringify(cloudData));
-                        console.log("🔄 Real-time update received from cloud!");
-
-                        // Refresh UI
-                        refreshUI();
-                    }
-                }
-            }, (error) => {
-                console.error("❌ Real-time listener error:", error);
-            });
-        }
-
-        // ====== REFRESH UI ======
-        function refreshUI() {
+        // ====== REFRESH UI (GLOBALLY EXPOSED) ======
+        window.refreshUI = function() {
+            console.log("🔄 Refreshing UI...");
             const today = new Date().toLocaleDateString();
             activeDate = today;
             localStorage.setItem("activeStudyDate", today);
@@ -611,6 +588,36 @@
             if (typeof restoreButtons === 'function') restoreButtons();
             if (typeof updateStreak === 'function') updateStreak();
             if (typeof loadMonthlyReports === 'function') loadMonthlyReports();
+            console.log("✅ UI refreshed successfully!");
+        }
+
+        // ====== REAL-TIME LISTENER ======
+        function setupRealtimeListener(userUID) {
+            if (unsubscribeSnapshot) {
+                unsubscribeSnapshot();
+                unsubscribeSnapshot = null;
+            }
+
+            const docRef = doc(db, "users", userUID);
+            unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const cloudData = docSnap.data().studyPulse;
+                    if (cloudData && Object.keys(cloudData).length > 0) {
+                        // Update local data
+                        window.allData = cloudData;
+                        localStorage.setItem("studyPulse", JSON.stringify(cloudData));
+                        console.log("🔄 Real-time update received from cloud!");
+                        console.log("📊 New data:", window.allData);
+                        
+                        // Refresh UI
+                        window.refreshUI();
+                    }
+                } else {
+                    console.log("📄 No document exists yet in Firestore");
+                }
+            }, (error) => {
+                console.error("❌ Real-time listener error:", error);
+            });
         }
 
         // ====== LOAD DATA FROM CLOUD ======
@@ -638,22 +645,28 @@
                             window.allData = cloudData;
                             localStorage.setItem("studyPulse", JSON.stringify(cloudData));
                             console.log("✅ Data loaded from Firestore!");
+                            console.log("📊 Loaded data:", window.allData);
                         } else {
+                            console.log("📄 Cloud data is empty, initializing fresh...");
                             window.allData = {};
                             localStorage.setItem("studyPulse", JSON.stringify(window.allData));
+                            // Save initial empty data to cloud
+                            await window.syncToCloud();
                         }
                     } else {
+                        console.log("📄 No document found, creating fresh data...");
                         window.allData = {};
                         localStorage.setItem("studyPulse", JSON.stringify(window.allData));
+                        // Save initial empty data to cloud
                         await window.syncToCloud();
                     }
                 } catch (e) {
-                    console.error("Error fetching cloud data:", e);
+                    console.error("❌ Error fetching cloud data:", e);
                     window.allData = JSON.parse(localStorage.getItem("studyPulse")) || {};
                 }
 
                 // Refresh UI
-                refreshUI();
+                window.refreshUI();
 
             } else {
                 currentUserUID = null;
@@ -692,6 +705,7 @@
             localStorage.setItem("activeStudyDate", activeDate);
         }
 
+        // Initialize allData
         if (!window.allData || typeof window.allData !== 'object' || Object.keys(window.allData).length === 0) {
             window.allData = JSON.parse(localStorage.getItem("studyPulse")) || {};
         }
@@ -732,7 +746,7 @@
         }
         createDay(activeDate);
 
-        /* ===== SAVE ===== */
+        /* ===== SAVE (with cloud sync) ===== */
         function saveData() {
             localStorage.setItem("studyPulse", JSON.stringify(window.allData));
             if (window.syncToCloud) {
@@ -1137,6 +1151,7 @@
         console.log("🚀 JEE 2028 Tracker loaded successfully!");
         console.log("📊 Current data:", window.allData);
         console.log("📅 Active Date:", activeDate);
+        console.log("💡 Tip: Open this on another device with same account to test real-time sync!");
     </script>
 </body>
 </html>
