@@ -462,7 +462,8 @@
             getFirestore,
             doc,
             setDoc,
-            getDoc
+            getDoc,
+            onSnapshot
         } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -483,6 +484,7 @@
 
         let isSignUp = false;
         let currentUserUID = null;
+        let unsubscribeSnapshot = null;
 
         window.toggleAuthMode = function() {
             isSignUp = !isSignUp;
@@ -527,6 +529,10 @@
 
         window.handleLogout = async function() {
             try {
+                if (unsubscribeSnapshot) {
+                    unsubscribeSnapshot();
+                    unsubscribeSnapshot = null;
+                }
                 await signOut(auth);
                 localStorage.removeItem("studyPulse");
                 localStorage.removeItem("activeStudyDate");
@@ -551,6 +557,62 @@
             }
         }
 
+        // ====== REAL-TIME LISTENER ======
+        function setupRealtimeListener(userUID) {
+            if (unsubscribeSnapshot) {
+                unsubscribeSnapshot();
+                unsubscribeSnapshot = null;
+            }
+
+            const docRef = doc(db, "users", userUID);
+            unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    const cloudData = docSnap.data().studyPulse;
+                    if (cloudData && Object.keys(cloudData).length > 0) {
+                        // Update local data
+                        window.allData = cloudData;
+                        localStorage.setItem("studyPulse", JSON.stringify(cloudData));
+                        console.log("🔄 Real-time update received from cloud!");
+
+                        // Refresh UI
+                        refreshUI();
+                    }
+                }
+            }, (error) => {
+                console.error("❌ Real-time listener error:", error);
+            });
+        }
+
+        // ====== REFRESH UI ======
+        function refreshUI() {
+            const today = new Date().toLocaleDateString();
+            activeDate = today;
+            localStorage.setItem("activeStudyDate", today);
+
+            // Ensure today exists
+            if (!window.allData[today]) {
+                window.allData[today] = {
+                    wakeUp: null,
+                    coachingStart: null,
+                    coachingEnd: null,
+                    studySessions: [],
+                    currentStudyStart: null,
+                    totalStudy: 0,
+                    sleep: null,
+                    completed: false
+                };
+                localStorage.setItem("studyPulse", JSON.stringify(window.allData));
+                window.syncToCloud();
+            }
+
+            document.getElementById('timeline').innerHTML = '';
+            document.getElementById('reportSection').innerHTML = '';
+            if (typeof restoreTimeline === 'function') restoreTimeline();
+            if (typeof restoreButtons === 'function') restoreButtons();
+            if (typeof updateStreak === 'function') updateStreak();
+            if (typeof loadMonthlyReports === 'function') loadMonthlyReports();
+        }
+
         // ====== LOAD DATA FROM CLOUD ======
         onAuthStateChanged(auth, async (user) => {
             const authModal = document.getElementById('authModal');
@@ -564,66 +626,41 @@
                 document.getElementById('userNameDisplay').innerText = user.displayName || user.email.split('@')[0];
                 document.getElementById('userEmailDisplay').innerText = user.email;
 
+                // Setup real-time listener FIRST
+                setupRealtimeListener(currentUserUID);
+
                 try {
                     const docRef = doc(db, "users", currentUserUID);
                     const docSnap = await getDoc(docRef);
                     if (docSnap.exists()) {
                         const cloudData = docSnap.data().studyPulse;
                         if (cloudData && Object.keys(cloudData).length > 0) {
-                            localStorage.setItem("studyPulse", JSON.stringify(cloudData));
                             window.allData = cloudData;
+                            localStorage.setItem("studyPulse", JSON.stringify(cloudData));
                             console.log("✅ Data loaded from Firestore!");
                         } else {
-                            // No data in cloud, initialize fresh
-                            console.log("No data in Firestore, initializing fresh...");
                             window.allData = {};
                             localStorage.setItem("studyPulse", JSON.stringify(window.allData));
                         }
                     } else {
-                        // Document doesn't exist, create fresh
-                        console.log("No document found, creating fresh data...");
                         window.allData = {};
                         localStorage.setItem("studyPulse", JSON.stringify(window.allData));
-                        // Save initial empty data to cloud
                         await window.syncToCloud();
                     }
                 } catch (e) {
                     console.error("Error fetching cloud data:", e);
-                    // Fallback: use local storage or empty object
                     window.allData = JSON.parse(localStorage.getItem("studyPulse")) || {};
                 }
 
-                // ===== CRITICAL FIX: Ensure today's date exists =====
-                const today = new Date().toLocaleDateString();
-                if (!window.allData[today]) {
-                    window.allData[today] = {
-                        wakeUp: null,
-                        coachingStart: null,
-                        coachingEnd: null,
-                        studySessions: [],
-                        currentStudyStart: null,
-                        totalStudy: 0,
-                        sleep: null,
-                        completed: false
-                    };
-                    localStorage.setItem("studyPulse", JSON.stringify(window.allData));
-                    await window.syncToCloud();
-                }
-
-                // Set active date
-                activeDate = today;
-                localStorage.setItem("activeStudyDate", today);
-
                 // Refresh UI
-                document.getElementById('timeline').innerHTML = '';
-                document.getElementById('reportSection').innerHTML = '';
-                if (typeof restoreTimeline === 'function') restoreTimeline();
-                if (typeof restoreButtons === 'function') restoreButtons();
-                if (typeof updateStreak === 'function') updateStreak();
-                if (typeof loadMonthlyReports === 'function') loadMonthlyReports();
+                refreshUI();
 
             } else {
                 currentUserUID = null;
+                if (unsubscribeSnapshot) {
+                    unsubscribeSnapshot();
+                    unsubscribeSnapshot = null;
+                }
                 authModal.style.display = 'flex';
                 userProfileBar.style.display = 'none';
             }
@@ -655,12 +692,10 @@
             localStorage.setItem("activeStudyDate", activeDate);
         }
 
-        // ===== CRITICAL FIX: Initialize allData properly =====
         if (!window.allData || typeof window.allData !== 'object' || Object.keys(window.allData).length === 0) {
             window.allData = JSON.parse(localStorage.getItem("studyPulse")) || {};
         }
 
-        // ===== CRITICAL FIX: Ensure today's date exists in allData =====
         function ensureTodayExists() {
             const today = getTodayDate();
             if (!window.allData[today]) {
@@ -745,7 +780,6 @@
             });
         }
 
-        // ===== SAFE GETTER for today's data =====
         function getTodayData() {
             const today = getTodayDate();
             if (!window.allData[today]) {
@@ -874,7 +908,7 @@
         /* ===== REPORT ===== */
         function generateReport() {
             const todayData = getTodayData();
-            let totalMinutes = todayData.totalStudy;
+            let totalMinutes = todayData.totalStudy || 0;
             if (todayData.currentStudyStart) {
                 const running = (new Date() - new Date(todayData.currentStudyStart)) / 1000 / 60;
                 totalMinutes += running;
@@ -990,7 +1024,7 @@
                 return da - db;
             });
             for (let i = dates.length - 1; i >= 0; i--) {
-                if (window.allData[dates[i]].completed) {
+                if (window.allData[dates[i]] && window.allData[dates[i]].completed) {
                     streak++;
                 } else {
                     break;
