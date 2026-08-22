@@ -101,6 +101,33 @@ max-width:1200px;
 margin:auto;
 }
 
+/* USER PROFILE BAR */
+.user-profile-bar{
+display:flex;
+justify-content:space-between;
+align-items:center;
+background:rgba(255,255,255,0.07);
+padding:12px 20px;
+border-radius:18px;
+border:1px solid rgba(255,255,255,0.1);
+margin-bottom:20px;
+backdrop-filter:blur(10px);
+flex-wrap:wrap;
+gap:10px;
+}
+
+.user-info span{
+color:#38bdf8;
+font-weight:600;
+}
+
+.logout-btn{
+background:linear-gradient(135deg,#ef4444,#f43f5e);
+padding:10px 20px;
+border-radius:14px;
+font-size:14px;
+}
+
 /* HERO */
 
 .hero{
@@ -629,6 +656,14 @@ font-size:2.8rem;
 
 <div class="container">
 
+<!-- USER PROFILE BAR -->
+<div class="user-profile-bar" id="userProfileBar" style="display:none;">
+<div class="user-info">
+👤 Logged in as: <span id="userNameDisplay">--</span> (<span id="userEmailDisplay">--</span>)
+</div>
+<button class="logout-btn" onclick="handleLogout()">🚪 Logout</button>
+</div>
+
 <div class="hero">
 
 <h1>🚀 JEE 2028</h1>
@@ -793,8 +828,15 @@ import {
   createUserWithEmailAndPassword, 
   GoogleAuthProvider, 
   signInWithPopup, 
+  signOut,
   onAuthStateChanged 
 } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc 
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCs5Tqjn0aoglz2Z5Yly0m3Fnnzp8azQro",
@@ -809,9 +851,11 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 const auth = getAuth(app);
+const db = getFirestore(app);
 const googleProvider = new GoogleAuthProvider();
 
 let isSignUp = false;
+let currentUserUID = null;
 
 window.toggleAuthMode = function() {
   isSignUp = !isSignUp;
@@ -852,14 +896,68 @@ window.handleGoogleLogin = async function() {
   }
 }
 
-onAuthStateChanged(auth, (user) => {
+window.handleLogout = async function() {
+  try {
+    await signOut(auth);
+    localStorage.removeItem("studyPulse");
+    location.reload();
+  } catch(error) {
+    alert(error.message);
+  }
+}
+
+onAuthStateChanged(auth, async (user) => {
   const authModal = document.getElementById('authModal');
+  const userProfileBar = document.getElementById('userProfileBar');
+  
   if(user) {
+    currentUserUID = user.uid;
     authModal.style.display = 'none';
+    userProfileBar.style.display = 'flex';
+    
+    document.getElementById('userNameDisplay').innerText = user.displayName || user.email.split('@')[0];
+    document.getElementById('userEmailDisplay').innerText = user.email;
+
+    // Load cloud data from Firestore
+    try {
+      const docRef = doc(db, "users", currentUserUID);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const cloudData = docSnap.data().studyPulse;
+        if (cloudData) {
+          localStorage.setItem("studyPulse", JSON.stringify(cloudData));
+          allData = cloudData;
+        }
+      }
+    } catch(e) {
+      console.error("Error fetching cloud data:", e);
+    }
+
+    // Refresh UI after data load
+    document.getElementById('timeline').innerHTML = '';
+    document.getElementById('reportSection').innerHTML = '';
+    restoreTimeline();
+    restoreButtons();
+    updateStreak();
+    loadMonthlyReports();
+
   } else {
+    currentUserUID = null;
     authModal.style.display = 'flex';
+    userProfileBar.style.display = 'none';
   }
 });
+
+// Cloud Sync Function
+window.syncToCloud = async function() {
+  if(!currentUserUID) return;
+  try {
+    const docRef = doc(db, "users", currentUserUID);
+    await setDoc(docRef, { studyPulse: allData }, { merge: true });
+  } catch(e) {
+    console.error("Cloud sync error:", e);
+  }
+}
 
 </script>
 
@@ -962,6 +1060,10 @@ localStorage.setItem(
 JSON.stringify(allData)
 );
 
+if(window.syncToCloud) {
+window.syncToCloud();
+}
+
 }
 
 /* FORMAT */
@@ -1014,6 +1116,8 @@ if(
 !btn.classList.contains('auth-btn')
 &&
 !btn.classList.contains('google-btn')
+&&
+!btn.classList.contains('logout-btn')
 ){
 
 btn.disabled = true;
@@ -1030,7 +1134,7 @@ document
 .querySelectorAll('button')
 .forEach(btn=>{
 
-if(!btn.classList.contains('auth-btn') && !btn.classList.contains('google-btn')){
+if(!btn.classList.contains('auth-btn') && !btn.classList.contains('google-btn') && !btn.classList.contains('logout-btn')){
 btn.disabled = false;
 }
 
