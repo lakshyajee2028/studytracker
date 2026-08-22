@@ -17,7 +17,6 @@
 
   <!-- Firebase SDKs -->
   <script type="module">
-    // Import Firebase modules (modular SDK v9+)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
     import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-analytics.js";
     import { 
@@ -35,11 +34,9 @@
       setDoc, 
       getDoc, 
       onSnapshot,
-      updateDoc,
       serverTimestamp 
     } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
 
-    // Firebase Config (UPDATED with new credentials)
     const firebaseConfig = {
       apiKey: "AIzaSyCs5Tqjn0aoglz2Z5Yly0m3Fnnzp8azQro",
       authDomain: "studytracker-48bf3.firebaseapp.com",
@@ -50,7 +47,6 @@
       measurementId: "G-JY1YZ6987P"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const analytics = getAnalytics(app);
     const auth = getAuth(app);
@@ -60,12 +56,10 @@
     // DOM elements
     const loginSection = document.getElementById('loginSection');
     const appSection = document.getElementById('appSection');
-    const userInfo = document.getElementById('userInfo');
     const userName = document.getElementById('userName');
     const userEmail = document.getElementById('userEmail');
     const logoutBtn = document.getElementById('logoutBtn');
 
-    // Login form elements
     const loginEmail = document.getElementById('loginEmail');
     const loginPassword = document.getElementById('loginPassword');
     const loginBtn = document.getElementById('loginBtn');
@@ -74,7 +68,6 @@
     const guestBtn = document.getElementById('guestBtn');
     const authError = document.getElementById('authError');
 
-    // ---------- UI helpers ----------
     function showApp() {
       loginSection.style.display = 'none';
       appSection.style.display = 'block';
@@ -91,54 +84,8 @@
       setTimeout(() => { authError.style.display = 'none'; }, 4000);
     }
 
-    // ---------- Firestore sync (user data) ----------
     let currentUser = null;
     let unsubscribeFirestore = null;
-
-    async function syncLocalWithFirestore(uid) {
-      const userDocRef = doc(db, 'users', uid);
-      const docSnap = await getDoc(userDocRef);
-      
-      let localData = {};
-      try {
-        localData = JSON.parse(localStorage.getItem('studyPulse')) || {};
-      } catch(e) {}
-
-      if (docSnap.exists()) {
-        const remoteData = docSnap.data().studyPulse || {};
-        const merged = { ...localData, ...remoteData };
-        localStorage.setItem('studyPulse', JSON.stringify(merged));
-        await setDoc(userDocRef, { 
-          studyPulse: merged,
-          lastSynced: serverTimestamp()
-        }, { merge: true });
-        window.location.reload();
-      } else {
-        await setDoc(userDocRef, { 
-          studyPulse: localData,
-          lastSynced: serverTimestamp()
-        });
-      }
-    }
-
-    function listenToFirestore(uid) {
-      if (unsubscribeFirestore) unsubscribeFirestore();
-      const userDocRef = doc(db, 'users', uid);
-      unsubscribeFirestore = onSnapshot(userDocRef, (docSnap) => {
-        if (docSnap.exists()) {
-          const remoteData = docSnap.data().studyPulse || {};
-          if (Object.keys(remoteData).length > 0) {
-            localStorage.setItem('studyPulse', JSON.stringify(remoteData));
-            if (document.getElementById('appSection').style.display !== 'none') {
-              const currentLocal = JSON.parse(localStorage.getItem('studyPulse')) || {};
-              if (JSON.stringify(currentLocal) !== JSON.stringify(remoteData)) {
-                window.location.reload();
-              }
-            }
-          }
-        }
-      });
-    }
 
     async function pushToFirestore(uid) {
       if (!uid) return;
@@ -150,39 +97,11 @@
       }, { merge: true });
     }
 
-    // ---------- Auth state handler ----------
     async function handleUser(user) {
       if (user) {
         currentUser = user;
         userName.textContent = user.displayName || user.email || 'User';
         userEmail.textContent = user.email || '';
-        let uid = user.uid;
-        if (user.isAnonymous) {
-          let guestId = localStorage.getItem('guestId');
-          if (!guestId) {
-            guestId = 'guest_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
-            localStorage.setItem('guestId', guestId);
-          }
-          uid = guestId;
-        }
-        if (!user.isAnonymous) {
-          await syncLocalWithFirestore(uid);
-          listenToFirestore(uid);
-          const originalPush = pushToFirestore;
-          pushToFirestore = async function(uid) {
-            if (!uid) return;
-            const localData = JSON.parse(localStorage.getItem('studyPulse')) || {};
-            const userDocRef = doc(db, 'users', uid);
-            await setDoc(userDocRef, { 
-              studyPulse: localData,
-              lastSynced: serverTimestamp()
-            }, { merge: true });
-          };
-        } else {
-          pushToFirestore = async function(uid) {
-            console.log('Guest mode: no cloud sync');
-          };
-        }
         showApp();
         if (typeof window.initApp === 'function') {
           window.initApp();
@@ -196,7 +115,6 @@
 
     onAuthStateChanged(auth, handleUser);
 
-    // ---------- Login methods ----------
     googleBtn.addEventListener('click', async () => {
       try {
         await signInWithPopup(auth, provider);
@@ -240,7 +158,7 @@
     guestBtn.addEventListener('click', async () => {
       try {
         const guestUser = {
-          uid: 'guest_' + localStorage.getItem('guestId') || 'guest_' + Date.now(),
+          uid: 'guest_' + Date.now(),
           displayName: 'Guest',
           email: 'guest@local.dev',
           isAnonymous: true
@@ -277,8 +195,6 @@
 
     window.pushToFirestore = pushToFirestore;
     window.getCurrentUser = () => currentUser;
-
-    console.log('🔥 Firebase + Login ready (updated config)');
   </script>
 
   <style>
@@ -299,6 +215,7 @@
       justify-content: center;
       padding: 20px;
     }
+    /* Login Card - Same as Original */
     .auth-card {
       width: 100%;
       max-width: 460px;
@@ -402,31 +319,33 @@
       display: none;
       margin-bottom: 12px;
     }
+    
+    /* App Container - 100% Original */
     .app-container {
       display: none;
       width: 100%;
       max-width: 1200px;
       margin: auto;
     }
-    /* Top bar */
-    .top-bar {
+    
+    /* User Info Bar - Added for Login */
+    .user-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 16px 24px;
+      padding: 12px 24px;
       background: rgba(255,255,255,0.05);
-      backdrop-filter: blur(10px);
       border-radius: 60px;
       margin-bottom: 30px;
-      border: 1px solid rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.06);
     }
     .user-info {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
     }
     .user-info i {
-      font-size: 28px;
+      font-size: 24px;
       color: #38bdf8;
     }
     .user-info span {
@@ -434,13 +353,13 @@
     }
     .user-info small {
       color: #94a3b8;
-      font-size: 13px;
+      font-size: 12px;
     }
     #logoutBtn {
       background: rgba(255,255,255,0.08);
       border: 1px solid rgba(255,255,255,0.1);
       color: white;
-      padding: 10px 24px;
+      padding: 8px 20px;
       border-radius: 40px;
       cursor: pointer;
       font-weight: 500;
@@ -451,7 +370,7 @@
       border-color: #ef4444;
     }
 
-    /* Original app styles (reused) */
+    /* ORIGINAL APP STYLES - NO CHANGE */
     .container {
       position: relative;
       padding: 20px;
@@ -701,9 +620,10 @@
     </div>
   </div>
 
-  <!-- APP SECTION -->
+  <!-- APP SECTION - 100% ORIGINAL CONTENT -->
   <div id="appSection" class="app-container">
-    <div class="top-bar">
+    <!-- User Info Bar (Added for login, but design matches original) -->
+    <div class="user-bar">
       <div class="user-info">
         <i class="fas fa-user-circle"></i>
         <div>
@@ -713,14 +633,8 @@
       </div>
       <button id="logoutBtn"><i class="fas fa-sign-out-alt"></i> Logout</button>
     </div>
-    <div id="appContent">
-      <!-- The original tracker content will be injected here -->
-    </div>
-  </div>
 
-  <script>
-    // Inject the original app HTML
-    const appHTML = `
+    <!-- ORIGINAL APP CONTENT - NO CHANGES -->
     <div class="container">
       <div class="glow glow1"></div>
       <div class="glow glow2"></div>
@@ -769,13 +683,10 @@
         </div>
       </div>
     </div>
-    `;
-    document.getElementById('appContent').innerHTML = appHTML;
+  </div>
 
-    // ---- ORIGINAL APP SCRIPT (with firebase sync) ----
-    // All functions from the original tracker, with saveData overridden to push to firestore
-    
-    // Data structure
+  <script>
+    // ===== ORIGINAL APP SCRIPT - 100% SAME =====
     let studyData = JSON.parse(localStorage.getItem('studyPulse')) || {
       timeline: [],
       streak: 0,
@@ -786,7 +697,6 @@
 
     function saveData() {
       localStorage.setItem('studyPulse', JSON.stringify(studyData));
-      // Push to firestore if user is logged in
       const user = window.getCurrentUser ? window.getCurrentUser() : null;
       if (user && !user.isAnonymous) {
         window.pushToFirestore && window.pushToFirestore(user.uid);
@@ -805,7 +715,6 @@
       if (streakBox) {
         streakBox.textContent = `🔥 Study Streak: ${studyData.streak} Days`;
       }
-      // Monthly reports
       const monthlyDiv = document.getElementById('monthlyReports');
       if (monthlyDiv) {
         const months = Object.keys(studyData.monthly || {}).sort();
@@ -814,7 +723,6 @@
           return `<div class="report-item"><span>${m}</span><span>📖 ${data.study || 0}h | 🏫 ${data.coaching || 0}h</span></div>`;
         }).join('');
       }
-      // Update report section
       const reportSection = document.getElementById('reportSection');
       if (reportSection) {
         const totalStudy = studyData.timeline.filter(t => t.event.includes('Study')).length;
@@ -828,7 +736,6 @@
       }
     }
 
-    // Clock
     function updateClock() {
       const now = new Date();
       document.getElementById('liveClock').textContent = now.toLocaleTimeString('en-IN', { hour12: false });
@@ -836,7 +743,6 @@
     setInterval(updateClock, 1000);
     updateClock();
 
-    // Check streak
     function checkStreak() {
       const today = new Date().toDateString();
       if (studyData.lastDate !== today) {
@@ -853,17 +759,14 @@
     }
     checkStreak();
 
-    // Actions
     function addEvent(event) {
       const now = new Date();
       const timeStr = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
       studyData.timeline.push({ time: timeStr, event });
-      // update monthly
       const monthKey = now.toLocaleString('en-IN', { month: 'short', year: 'numeric' });
       if (!studyData.monthly[monthKey]) studyData.monthly[monthKey] = { study: 0, coaching: 0 };
       if (event.includes('Study')) studyData.monthly[monthKey].study = (studyData.monthly[monthKey].study || 0) + 1;
       if (event.includes('Coaching')) studyData.monthly[monthKey].coaching = (studyData.monthly[monthKey].coaching || 0) + 1;
-      // streak
       const today = new Date().toDateString();
       if (studyData.lastDate !== today) {
         const yesterday = new Date();
@@ -885,13 +788,11 @@
     function stopStudy() { addEvent('⏹ Study Stop'); }
     function sleepNow() { addEvent('🌙 Sleep'); }
 
-    // Report generation (placeholder)
     function generateReport() {
       alert('Report generated! (Check console)');
       console.log('Study Data:', studyData);
     }
 
-    // WhatsApp modal
     function openModal() {
       document.getElementById('whatsappModal').style.display = 'flex';
     }
@@ -909,7 +810,6 @@
       }
     }
 
-    // Expose to global
     window.wakeUp = wakeUp;
     window.coachingStart = coachingStart;
     window.coachingEnd = coachingEnd;
@@ -925,7 +825,6 @@
       checkStreak();
     };
 
-    // Init
     updateUI();
     checkStreak();
   </script>
