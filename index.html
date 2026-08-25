@@ -367,6 +367,27 @@
             margin-top: 10px;
         }
         .auth-switch span { color: #38bdf8; font-weight: 600; }
+        .sync-status {
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            padding: 8px 16px;
+            border-radius: 12px;
+            font-size: 12px;
+            color: #86efac;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .sync-status.syncing {
+            background: rgba(251, 191, 36, 0.15);
+            border-color: rgba(251, 191, 36, 0.3);
+            color: #fcd34d;
+        }
+        .sync-status.error {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+        }
         @media(max-width:900px) {
             .grid { grid-template-columns: 1fr; }
             .hero h1 { font-size: 2.8rem; }
@@ -383,7 +404,10 @@
 
         <div class="user-profile-bar" id="userProfileBar" style="display:none;">
             <div class="user-info">👤 Logged in as: <span id="userNameDisplay">--</span> (<span id="userEmailDisplay">--</span>)</div>
-            <button class="logout-btn" onclick="handleLogout()">🚪 Logout</button>
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <div class="sync-status" id="syncStatus">🔄 Synced</div>
+                <button class="logout-btn" onclick="handleLogout()">🚪 Logout</button>
+            </div>
         </div>
 
         <div class="hero">
@@ -463,7 +487,8 @@
             doc,
             setDoc,
             getDoc,
-            onSnapshot
+            onSnapshot,
+            updateDoc
         } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
         const firebaseConfig = {
@@ -485,7 +510,10 @@
         let isSignUp = false;
         let currentUserUID = null;
         let unsubscribeSnapshot = null;
+        let isSyncing = false;
+        let syncTimeout = null;
 
+        // ===== EXPOSE FUNCTIONS TO GLOBAL SCOPE =====
         window.toggleAuthMode = function() {
             isSignUp = !isSignUp;
             document.getElementById('authTitle').innerText = isSignUp ? '📝 Sign Up' : '🔐 Login';
@@ -542,56 +570,102 @@
             }
         }
 
-        // ====== CLOUD SYNC (GLOBALLY EXPOSED) ======
-        window.syncToCloud = async function() {
+        // ===== SYNC STATUS =====
+        function updateSyncStatus(status, message) {
+            const el = document.getElementById('syncStatus');
+            el.className = 'sync-status';
+            if (status === 'syncing') {
+                el.className += ' syncing';
+                el.innerHTML = '⏳ Syncing...';
+            } else if (status === 'error') {
+                el.className += ' error';
+                el.innerHTML = '⚠️ ' + message;
+            } else {
+                el.innerHTML = '✅ ' + message;
+            }
+        }
+
+        // ===== CLOUD SYNC WITH DEBOUNCE =====
+        window.syncToCloud = async function(force = false) {
             if (!currentUserUID) {
                 console.log("❌ No user logged in, skipping cloud sync");
-                return;
+                return false;
             }
+
+            if (isSyncing && !force) {
+                console.log("⏳ Sync already in progress, skipping...");
+                return false;
+            }
+
+            // Clear existing timeout
+            if (syncTimeout) {
+                clearTimeout(syncTimeout);
+                syncTimeout = null;
+            }
+
+            // Debounce: wait 500ms before syncing
+            return new Promise((resolve) => {
+                syncTimeout = setTimeout(async () => {
+                    try {
+                        isSyncing = true;
+                        updateSyncStatus('syncing');
+
+                        const docRef = doc(db, "users", currentUserUID);
+                        const data = window.allData || {};
+                        
+                        // Only sync if there's data
+                        if (Object.keys(data).length > 0) {
+                            await setDoc(docRef, { studyPulse: data }, { merge: true });
+                            console.log("✅ Data synced to Firestore successfully!");
+                            updateSyncStatus('', 'Synced');
+                            resolve(true);
+                        } else {
+                            console.log("📭 No data to sync");
+                            updateSyncStatus('', 'No data');
+                            resolve(true);
+                        }
+                    } catch (e) {
+                        console.error("❌ Cloud sync error:", e);
+                        updateSyncStatus('error', 'Sync failed');
+                        resolve(false);
+                    } finally {
+                        isSyncing = false;
+                        syncTimeout = null;
+                    }
+                }, force ? 0 : 500);
+            });
+        }
+
+        // ===== SAVE DATA WITH AUTO-SYNC =====
+        function saveData() {
+            localStorage.setItem("studyPulse", JSON.stringify(window.allData));
+            // Auto-sync to cloud
+            window.syncToCloud();
+        }
+
+        // ===== LOAD FROM CLOUD =====
+        async function loadFromCloud(userUID) {
             try {
-                const docRef = doc(db, "users", currentUserUID);
-                await setDoc(docRef, { studyPulse: window.allData }, { merge: true });
-                console.log("✅ Data synced to Firestore successfully!");
-                return true;
+                const docRef = doc(db, "users", userUID);
+                const docSnap = await getDoc(docRef);
+                
+                if (docSnap.exists()) {
+                    const cloudData = docSnap.data().studyPulse;
+                    if (cloudData && typeof cloudData === 'object' && Object.keys(cloudData).length > 0) {
+                        window.allData = cloudData;
+                        localStorage.setItem("studyPulse", JSON.stringify(cloudData));
+                        console.log("✅ Data loaded from Firestore!");
+                        return true;
+                    }
+                }
+                return false;
             } catch (e) {
-                console.error("❌ Cloud sync error:", e);
+                console.error("❌ Error fetching cloud data:", e);
                 return false;
             }
         }
 
-        // ====== REFRESH UI (GLOBALLY EXPOSED) ======
-        window.refreshUI = function() {
-            console.log("🔄 Refreshing UI...");
-            const today = new Date().toLocaleDateString();
-            activeDate = today;
-            localStorage.setItem("activeStudyDate", today);
-
-            // Ensure today exists
-            if (!window.allData[today]) {
-                window.allData[today] = {
-                    wakeUp: null,
-                    coachingStart: null,
-                    coachingEnd: null,
-                    studySessions: [],
-                    currentStudyStart: null,
-                    totalStudy: 0,
-                    sleep: null,
-                    completed: false
-                };
-                localStorage.setItem("studyPulse", JSON.stringify(window.allData));
-                window.syncToCloud();
-            }
-
-            document.getElementById('timeline').innerHTML = '';
-            document.getElementById('reportSection').innerHTML = '';
-            if (typeof restoreTimeline === 'function') restoreTimeline();
-            if (typeof restoreButtons === 'function') restoreButtons();
-            if (typeof updateStreak === 'function') updateStreak();
-            if (typeof loadMonthlyReports === 'function') loadMonthlyReports();
-            console.log("✅ UI refreshed successfully!");
-        }
-
-        // ====== REAL-TIME LISTENER ======
+        // ===== REAL-TIME LISTENER =====
         function setupRealtimeListener(userUID) {
             if (unsubscribeSnapshot) {
                 unsubscribeSnapshot();
@@ -599,28 +673,46 @@
             }
 
             const docRef = doc(db, "users", userUID);
-            unsubscribeSnapshot = onSnapshot(docRef, (docSnap) => {
+            let isFirstLoad = true;
+
+            unsubscribeSnapshot = onSnapshot(docRef, async (docSnap) => {
                 if (docSnap.exists()) {
                     const cloudData = docSnap.data().studyPulse;
-                    if (cloudData && Object.keys(cloudData).length > 0) {
-                        // Update local data
-                        window.allData = cloudData;
-                        localStorage.setItem("studyPulse", JSON.stringify(cloudData));
-                        console.log("🔄 Real-time update received from cloud!");
-                        console.log("📊 New data:", window.allData);
+                    if (cloudData && typeof cloudData === 'object' && Object.keys(cloudData).length > 0) {
+                        // Check if data is different from local
+                        const localData = JSON.parse(localStorage.getItem("studyPulse") || "{}");
+                        const cloudStr = JSON.stringify(cloudData);
+                        const localStr = JSON.stringify(localData);
                         
-                        // Refresh UI
-                        window.refreshUI();
+                        if (cloudStr !== localStr) {
+                            console.log("🔄 Real-time update received from cloud!");
+                            window.allData = cloudData;
+                            localStorage.setItem("studyPulse", cloudStr);
+                            
+                            // Refresh UI
+                            if (typeof refreshUI === 'function') {
+                                refreshUI();
+                            }
+                            updateSyncStatus('', 'Synced');
+                        } else if (isFirstLoad) {
+                            console.log("📄 Local data already matches cloud");
+                            isFirstLoad = false;
+                        }
                     }
                 } else {
                     console.log("📄 No document exists yet in Firestore");
+                    // Create empty document
+                    if (window.allData && Object.keys(window.allData).length > 0) {
+                        await window.syncToCloud(true);
+                    }
                 }
             }, (error) => {
                 console.error("❌ Real-time listener error:", error);
+                updateSyncStatus('error', 'Connection lost');
             });
         }
 
-        // ====== LOAD DATA FROM CLOUD ======
+        // ===== AUTH STATE =====
         onAuthStateChanged(auth, async (user) => {
             const authModal = document.getElementById('authModal');
             const userProfileBar = document.getElementById('userProfileBar');
@@ -633,40 +725,26 @@
                 document.getElementById('userNameDisplay').innerText = user.displayName || user.email.split('@')[0];
                 document.getElementById('userEmailDisplay').innerText = user.email;
 
-                // Setup real-time listener FIRST
-                setupRealtimeListener(currentUserUID);
-
-                try {
-                    const docRef = doc(db, "users", currentUserUID);
-                    const docSnap = await getDoc(docRef);
-                    if (docSnap.exists()) {
-                        const cloudData = docSnap.data().studyPulse;
-                        if (cloudData && Object.keys(cloudData).length > 0) {
-                            window.allData = cloudData;
-                            localStorage.setItem("studyPulse", JSON.stringify(cloudData));
-                            console.log("✅ Data loaded from Firestore!");
-                            console.log("📊 Loaded data:", window.allData);
-                        } else {
-                            console.log("📄 Cloud data is empty, initializing fresh...");
-                            window.allData = {};
-                            localStorage.setItem("studyPulse", JSON.stringify(window.allData));
-                            // Save initial empty data to cloud
-                            await window.syncToCloud();
-                        }
-                    } else {
-                        console.log("📄 No document found, creating fresh data...");
-                        window.allData = {};
-                        localStorage.setItem("studyPulse", JSON.stringify(window.allData));
-                        // Save initial empty data to cloud
-                        await window.syncToCloud();
+                // Load data from cloud
+                const hasCloudData = await loadFromCloud(currentUserUID);
+                
+                if (!hasCloudData) {
+                    // No cloud data, initialize from local or empty
+                    const localData = JSON.parse(localStorage.getItem("studyPulse") || "{}");
+                    window.allData = localData;
+                    // Save to cloud if there's local data
+                    if (Object.keys(localData).length > 0) {
+                        await window.syncToCloud(true);
                     }
-                } catch (e) {
-                    console.error("❌ Error fetching cloud data:", e);
-                    window.allData = JSON.parse(localStorage.getItem("studyPulse")) || {};
                 }
 
+                // Setup real-time listener
+                setupRealtimeListener(currentUserUID);
+
                 // Refresh UI
-                window.refreshUI();
+                if (typeof refreshUI === 'function') {
+                    refreshUI();
+                }
 
             } else {
                 currentUserUID = null;
@@ -676,8 +754,17 @@
                 }
                 authModal.style.display = 'flex';
                 userProfileBar.style.display = 'none';
+                window.allData = JSON.parse(localStorage.getItem("studyPulse") || "{}");
             }
         });
+
+        // ===== EXPOSE SAVE DATA =====
+        window.saveData = saveData;
+        window.loadFromCloud = loadFromCloud;
+        window.setupRealtimeListener = setupRealtimeListener;
+
+        console.log("🚀 Firebase initialized successfully!");
+        console.log("📡 Real-time sync enabled for all devices!");
     </script>
 
     <script>
@@ -706,7 +793,7 @@
         }
 
         // Initialize allData
-        if (!window.allData || typeof window.allData !== 'object' || Object.keys(window.allData).length === 0) {
+        if (!window.allData || typeof window.allData !== 'object') {
             window.allData = JSON.parse(localStorage.getItem("studyPulse")) || {};
         }
 
@@ -723,7 +810,7 @@
                     sleep: null,
                     completed: false
                 };
-                saveData();
+                window.saveData();
             }
             return today;
         }
@@ -741,21 +828,14 @@
                     sleep: null,
                     completed: false
                 };
-                saveData();
+                window.saveData();
             }
         }
         createDay(activeDate);
 
-        /* ===== SAVE (with cloud sync) ===== */
-        function saveData() {
-            localStorage.setItem("studyPulse", JSON.stringify(window.allData));
-            if (window.syncToCloud) {
-                window.syncToCloud();
-            }
-        }
-
         /* ===== FORMAT ===== */
         function formatTime(time) {
+            if (!time) return '--';
             return new Date(time).toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit'
@@ -807,7 +887,7 @@
                     sleep: null,
                     completed: false
                 };
-                saveData();
+                window.saveData();
             }
             return window.allData[today];
         }
@@ -820,7 +900,7 @@
                 return;
             }
             todayData.wakeUp = new Date().toISOString();
-            saveData();
+            window.saveData();
             addTimeline('🌅 Wake Up: ' + formatTime(todayData.wakeUp));
             document.getElementById('wakeBtn').disabled = true;
             updateStreak();
@@ -835,7 +915,7 @@
                 return;
             }
             todayData.coachingStart = new Date().toISOString();
-            saveData();
+            window.saveData();
             addTimeline('🏫 Coaching Started: ' + formatTime(todayData.coachingStart));
             updateStreak();
             loadMonthlyReports();
@@ -853,7 +933,7 @@
                 return;
             }
             todayData.coachingEnd = new Date().toISOString();
-            saveData();
+            window.saveData();
             addTimeline('🏠 Returned From Coaching: ' + formatTime(todayData.coachingEnd));
             updateStreak();
             loadMonthlyReports();
@@ -868,7 +948,7 @@
             }
             const now = new Date();
             todayData.currentStudyStart = now.toISOString();
-            saveData();
+            window.saveData();
             addTimeline('📖 Study Started: ' + formatTime(now));
             updateStreak();
             loadMonthlyReports();
@@ -892,7 +972,7 @@
             });
             todayData.totalStudy += duration;
             todayData.currentStudyStart = null;
-            saveData();
+            window.saveData();
             addTimeline('⏹ Study Ended: ' + formatTime(end) + ' | Duration: ' + (duration / 60).toFixed(2) + ' hrs');
             generateReport();
             updateStreak();
@@ -907,11 +987,11 @@
                 return;
             }
             if (todayData.currentStudyStart) {
-                stopStudy();
+                window.stopStudy();
             }
             todayData.sleep = new Date().toISOString();
             todayData.completed = true;
-            saveData();
+            window.saveData();
             addTimeline('🌙 Sleep Time: ' + formatTime(todayData.sleep));
             generateReport();
             updateStreak();
@@ -956,7 +1036,8 @@
                     datasets: [{
                         label: 'Hours',
                         data: [totalStudyHours],
-                        borderRadius: 20
+                        borderRadius: 20,
+                        backgroundColor: 'rgba(56, 189, 248, 0.8)'
                     }]
                 },
                 options: {
@@ -1025,7 +1106,7 @@
         document.addEventListener('keydown', function(e) {
             const modal = document.getElementById('whatsappModal');
             if (modal.style.display === 'flex' && e.key === 'Enter') {
-                confirmSendReport();
+                window.confirmSendReport();
             }
         });
 
@@ -1114,6 +1195,37 @@
             }
         }
 
+        /* ===== REFRESH UI ===== */
+        window.refreshUI = function() {
+            console.log("🔄 Refreshing UI...");
+            const today = getTodayDate();
+            activeDate = today;
+            localStorage.setItem("activeStudyDate", today);
+
+            // Ensure today exists
+            if (!window.allData[today]) {
+                window.allData[today] = {
+                    wakeUp: null,
+                    coachingStart: null,
+                    coachingEnd: null,
+                    studySessions: [],
+                    currentStudyStart: null,
+                    totalStudy: 0,
+                    sleep: null,
+                    completed: false
+                };
+                window.saveData();
+            }
+
+            document.getElementById('timeline').innerHTML = '';
+            document.getElementById('reportSection').innerHTML = '';
+            restoreTimeline();
+            restoreButtons();
+            updateStreak();
+            loadMonthlyReports();
+            console.log("✅ UI refreshed successfully!");
+        }
+
         /* ===== AUTO NEXT DAY RESET ===== */
         function checkDateReset() {
             const today = getTodayDate();
@@ -1122,7 +1234,7 @@
                 activeDate = today;
                 localStorage.setItem("activeStudyDate", today);
                 createDay(today);
-                saveData();
+                window.saveData();
                 document.getElementById('timeline').innerHTML = '';
                 document.getElementById('reportSection').innerHTML = '';
                 enableAllButtons();
@@ -1151,7 +1263,8 @@
         console.log("🚀 JEE 2028 Tracker loaded successfully!");
         console.log("📊 Current data:", window.allData);
         console.log("📅 Active Date:", activeDate);
-        console.log("💡 Tip: Open this on another device with same account to test real-time sync!");
+        console.log("💡 Real-time sync enabled across all devices!");
+        console.log("📱 Open on multiple devices with same Google account to test!");
     </script>
 </body>
 </html>
