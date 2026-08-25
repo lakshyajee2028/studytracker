@@ -102,6 +102,11 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             margin-bottom: 10px;
+            animation: shimmer 3s ease-in-out infinite alternate;
+        }
+        @keyframes shimmer {
+            0% { filter: hue-rotate(0deg); }
+            100% { filter: hue-rotate(20deg); }
         }
         .hero p { font-size: 18px; color: #dbeafe; line-height: 1.7; max-width: 700px; }
         #liveClock {
@@ -111,6 +116,12 @@
             color: white;
             letter-spacing: 2px;
             text-shadow: 0 0 25px rgba(56, 189, 248, 0.6);
+            background: rgba(255,255,255,0.05);
+            padding: 12px 24px;
+            border-radius: 18px;
+            display: inline-block;
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(5px);
         }
         .hero-stats {
             display: flex;
@@ -239,6 +250,7 @@
             background: linear-gradient(90deg, #38bdf8, #14b8a6, #a855f7);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
+            animation: shimmer 3s ease-in-out infinite alternate;
         }
         .report-grid {
             display: grid;
@@ -522,6 +534,19 @@
         const authModal = document.getElementById('authModal');
         const userProfileBar = document.getElementById('userProfileBar');
         const syncStatus = document.getElementById('syncStatus');
+
+        // ===== LIVE CLOCK =====
+        function updateClock() {
+            const now = new Date();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            document.getElementById('liveClock').textContent = `${hours}:${minutes}:${seconds}`;
+        }
+        // Update clock every second
+        setInterval(updateClock, 1000);
+        // Initial call to set clock immediately
+        updateClock();
 
         // ===== AUTH FUNCTIONS (GLOBAL) =====
         window.toggleAuthMode = function() {
