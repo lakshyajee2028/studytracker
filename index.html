@@ -388,6 +388,18 @@
             border-color: rgba(239, 68, 68, 0.3);
             color: #fca5a5;
         }
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
         @media(max-width:900px) {
             .grid { grid-template-columns: 1fr; }
             .hero h1 { font-size: 2.8rem; }
@@ -405,7 +417,7 @@
         <div class="user-profile-bar" id="userProfileBar" style="display:none;">
             <div class="user-info">👤 Logged in as: <span id="userNameDisplay">--</span> (<span id="userEmailDisplay">--</span>)</div>
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                <div class="sync-status" id="syncStatus">🔄 Synced</div>
+                <div class="sync-status" id="syncStatus">✅ Synced</div>
                 <button class="logout-btn" onclick="handleLogout()">🚪 Logout</button>
             </div>
         </div>
@@ -512,6 +524,7 @@
         let unsubscribeSnapshot = null;
         let isSyncing = false;
         let syncTimeout = null;
+        let localData = {};
 
         // ===== EXPOSE FUNCTIONS TO GLOBAL SCOPE =====
         window.toggleAuthMode = function() {
@@ -573,6 +586,7 @@
         // ===== SYNC STATUS =====
         function updateSyncStatus(status, message) {
             const el = document.getElementById('syncStatus');
+            if (!el) return;
             el.className = 'sync-status';
             if (status === 'syncing') {
                 el.className += ' syncing';
@@ -585,7 +599,12 @@
             }
         }
 
-        // ===== CLOUD SYNC WITH DEBOUNCE =====
+        // ===== GET TODAY DATE =====
+        function getTodayDate() {
+            return new Date().toLocaleDateString();
+        }
+
+        // ===== CLOUD SYNC =====
         window.syncToCloud = async function(force = false) {
             if (!currentUserUID) {
                 console.log("❌ No user logged in, skipping cloud sync");
@@ -597,13 +616,11 @@
                 return false;
             }
 
-            // Clear existing timeout
             if (syncTimeout) {
                 clearTimeout(syncTimeout);
                 syncTimeout = null;
             }
 
-            // Debounce: wait 500ms before syncing
             return new Promise((resolve) => {
                 syncTimeout = setTimeout(async () => {
                     try {
@@ -613,7 +630,6 @@
                         const docRef = doc(db, "users", currentUserUID);
                         const data = window.allData || {};
                         
-                        // Only sync if there's data
                         if (Object.keys(data).length > 0) {
                             await setDoc(docRef, { studyPulse: data }, { merge: true });
                             console.log("✅ Data synced to Firestore successfully!");
@@ -636,10 +652,9 @@
             });
         }
 
-        // ===== SAVE DATA WITH AUTO-SYNC =====
+        // ===== SAVE DATA =====
         function saveData() {
             localStorage.setItem("studyPulse", JSON.stringify(window.allData));
-            // Auto-sync to cloud
             window.syncToCloud();
         }
 
@@ -679,7 +694,6 @@
                 if (docSnap.exists()) {
                     const cloudData = docSnap.data().studyPulse;
                     if (cloudData && typeof cloudData === 'object' && Object.keys(cloudData).length > 0) {
-                        // Check if data is different from local
                         const localData = JSON.parse(localStorage.getItem("studyPulse") || "{}");
                         const cloudStr = JSON.stringify(cloudData);
                         const localStr = JSON.stringify(localData);
@@ -689,7 +703,6 @@
                             window.allData = cloudData;
                             localStorage.setItem("studyPulse", cloudStr);
                             
-                            // Refresh UI
                             if (typeof refreshUI === 'function') {
                                 refreshUI();
                             }
@@ -701,7 +714,6 @@
                     }
                 } else {
                     console.log("📄 No document exists yet in Firestore");
-                    // Create empty document
                     if (window.allData && Object.keys(window.allData).length > 0) {
                         await window.syncToCloud(true);
                     }
@@ -725,23 +737,18 @@
                 document.getElementById('userNameDisplay').innerText = user.displayName || user.email.split('@')[0];
                 document.getElementById('userEmailDisplay').innerText = user.email;
 
-                // Load data from cloud
                 const hasCloudData = await loadFromCloud(currentUserUID);
                 
                 if (!hasCloudData) {
-                    // No cloud data, initialize from local or empty
                     const localData = JSON.parse(localStorage.getItem("studyPulse") || "{}");
                     window.allData = localData;
-                    // Save to cloud if there's local data
                     if (Object.keys(localData).length > 0) {
                         await window.syncToCloud(true);
                     }
                 }
 
-                // Setup real-time listener
                 setupRealtimeListener(currentUserUID);
 
-                // Refresh UI
                 if (typeof refreshUI === 'function') {
                     refreshUI();
                 }
@@ -758,7 +765,6 @@
             }
         });
 
-        // ===== EXPOSE SAVE DATA =====
         window.saveData = saveData;
         window.loadFromCloud = loadFromCloud;
         window.setupRealtimeListener = setupRealtimeListener;
@@ -792,7 +798,6 @@
             localStorage.setItem("activeStudyDate", activeDate);
         }
 
-        // Initialize allData
         if (!window.allData || typeof window.allData !== 'object') {
             window.allData = JSON.parse(localStorage.getItem("studyPulse")) || {};
         }
@@ -852,25 +857,14 @@
 
         /* ===== BUTTON CONTROLS ===== */
         function disableAllButtons() {
-            document.querySelectorAll('button').forEach(btn => {
-                if (!btn.classList.contains('download-btn') &&
-                    !btn.classList.contains('whatsapp-btn') &&
-                    !btn.classList.contains('sendBtn') &&
-                    !btn.classList.contains('cancelBtn') &&
-                    !btn.classList.contains('auth-btn') &&
-                    !btn.classList.contains('google-btn') &&
-                    !btn.classList.contains('logout-btn')) {
-                    btn.disabled = true;
-                }
+            document.querySelectorAll('.buttons button').forEach(btn => {
+                btn.disabled = true;
             });
         }
 
         function enableAllButtons() {
-            document.querySelectorAll('button').forEach(btn => {
-                if (!btn.classList.contains('auth-btn') && !btn.classList.contains('google-btn') && !btn.classList
-                    .contains('logout-btn')) {
-                    btn.disabled = false;
-                }
+            document.querySelectorAll('.buttons button').forEach(btn => {
+                btn.disabled = false;
             });
         }
 
@@ -1029,35 +1023,39 @@
             `;
 
             const ctx = document.getElementById('studyChart');
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ['Self Study Hours'],
-                    datasets: [{
-                        label: 'Hours',
-                        data: [totalStudyHours],
-                        borderRadius: 20,
-                        backgroundColor: 'rgba(56, 189, 248, 0.8)'
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        legend: {
-                            labels: { color: 'white' }
-                        }
+            if (ctx) {
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Self Study Hours'],
+                        datasets: [{
+                            label: 'Hours',
+                            data: [totalStudyHours],
+                            borderRadius: 20,
+                            backgroundColor: 'rgba(56, 189, 248, 0.8)'
+                        }]
                     },
-                    scales: {
-                        x: { ticks: { color: 'white' } },
-                        y: { ticks: { color: 'white' } }
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: {
+                                labels: { color: 'white' }
+                            }
+                        },
+                        scales: {
+                            x: { ticks: { color: 'white' } },
+                            y: { ticks: { color: 'white' } }
+                        }
                     }
-                }
-            });
+                });
+            }
         }
 
         /* ===== DOWNLOAD ===== */
         window.downloadReport = function() {
-            html2canvas(document.getElementById('reportCard')).then(canvas => {
+            const reportCard = document.getElementById('reportCard');
+            if (!reportCard) return;
+            html2canvas(reportCard).then(canvas => {
                 const link = document.createElement('a');
                 link.download = `Study_Report_${activeDate}.png`;
                 link.href = canvas.toDataURL();
@@ -1091,7 +1089,9 @@
                 return;
             }
             const finalNumber = '91' + number;
-            html2canvas(document.getElementById('reportCard')).then(canvas => {
+            const reportCard = document.getElementById('reportCard');
+            if (!reportCard) return;
+            html2canvas(reportCard).then(canvas => {
                 const link = document.createElement('a');
                 link.download = `Study_Report_${activeDate}.png`;
                 link.href = canvas.toDataURL();
@@ -1132,7 +1132,12 @@
         function loadMonthlyReports() {
             const monthly = document.getElementById('monthlyReports');
             monthly.innerHTML = '';
-            Object.keys(window.allData).reverse().forEach(date => {
+            const dates = Object.keys(window.allData).sort((a, b) => {
+                const da = new Date(a.split('/').reverse().join('-'));
+                const db = new Date(b.split('/').reverse().join('-'));
+                return db - da;
+            });
+            dates.forEach(date => {
                 const d = window.allData[date];
                 if (d && d.completed) {
                     let totalMinutes = d.totalStudy || 0;
@@ -1202,7 +1207,6 @@
             activeDate = today;
             localStorage.setItem("activeStudyDate", today);
 
-            // Ensure today exists
             if (!window.allData[today]) {
                 window.allData[today] = {
                     wakeUp: null,
